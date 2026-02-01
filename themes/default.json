@@ -1,0 +1,1 @@
+{"prompt_template": "!green!%username%!reset!@!blue!%hostname%!reset! %directory% > "}
