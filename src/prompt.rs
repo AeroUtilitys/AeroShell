@@ -97,6 +97,7 @@ mod tests {
             prompt_template: "".to_string(),
             username: "testuser".to_string(),
             theme: "default".to_string(),
+            editor: "nano".to_string(),
         };
 
         // Mock env vars would be ideal, but for now we test username from config
