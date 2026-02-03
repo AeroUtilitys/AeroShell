@@ -21,10 +21,15 @@ impl Default for Config {
         // Define default example colors
         let mut colors = HashMap::new();
         colors.insert("lightpink".to_string(), "#FFB6C1".to_string());
+        colors.insert("pink".to_string(), "#FFC0CB".to_string());
         colors.insert("purple".to_string(), "#800080".to_string());
+        colors.insert("white".to_string(), "#FFFFFF".to_string());
+        colors.insert("orange".to_string(), "#FFA500".to_string());
+        colors.insert("teal".to_string(), "#008080".to_string());
+        colors.insert("lime".to_string(), "#00FF00".to_string());
 
         Self {
-            prompt_template: "!lightpink!%username%!grey!<>!purple!%directory%!green!:!reset! ".to_string(),
+            prompt_template: "!lightpink!%username%!white!<>!purple!%directory%!green!:!reset! ".to_string(),
             username,
             editor: "nano".to_string(),
             colors,
@@ -81,10 +86,15 @@ pub fn save_config(config: &Config) -> std::io::Result<()> {
         "# AeroShell Configuration\n\
          # -----------------------\n\
          # Color Selector\n\
-         # define custom colors here using hex codes (e.g. #RRGGBB)\n\
+         # Define custom colors here using hex codes (e.g. #RRGGBB)\n\
          # usage in prompt: !colorname!\n\
-         # Available built-in colors: \n\
+         #\n\
+         # Available built-in colors (ANSI):\n\
          #   black, red, green, yellow, blue, magenta, cyan, white, grey\n\
+         #\n\
+         # Available custom colors (Hex):\n\
+         #   lightpink, pink, purple, white (hex), orange, teal, lime\n\
+         #\n\
          # Available styles:\n\
          #   bold, italic, underline, reset\n\
          #\n\
