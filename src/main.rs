@@ -4,6 +4,8 @@ mod completer;
 
 use std::process::{Command, Stdio};
 use std::env;
+use std::fs;
+use std::io::Read;
 use crate::config::{load_config, save_config, apply_theme, get_config_path};
 use crate::prompt::format_prompt;
 use crate::completer::AeroCompleter;
@@ -90,7 +92,7 @@ fn main() {
                             println!("Usage: config <command> [args]");
                             println!("Commands:");
                             println!("  nano            - Open config in configured editor");
-                            println!("  set-default     - Set AeroShell as your default shell");
+                            println!("  set-default     - Set AeroShell as your default shell (adds to /etc/shells)");
                             println!("  prompt <val>    - Set prompt template");
                             println!("  username <val>  - Set username");
                             println!("  editor <val>    - Set default editor");
@@ -113,19 +115,50 @@ fn main() {
                                 },
                                 "set-default" => {
                                     println!("Setting AeroShell as default shell...");
-                                    // Get path to current executable
                                     if let Ok(exe_path) = env::current_exe() {
                                         let path_str = exe_path.to_string_lossy().to_string();
-                                        println!("Run: chsh -s {}", path_str);
-                                        // Try running chsh
+
+                                        // 1. Check /etc/shells
+                                        let mut needs_add = true;
+                                        if let Ok(mut file) = fs::File::open("/etc/shells") {
+                                            let mut contents = String::new();
+                                            if file.read_to_string(&mut contents).is_ok() {
+                                                if contents.lines().any(|line| line.trim() == path_str) {
+                                                    needs_add = false;
+                                                }
+                                            }
+                                        }
+
+                                        // 2. Add to /etc/shells if needed
+                                        if needs_add {
+                                            println!("Adding {} to /etc/shells (requires sudo)...", path_str);
+                                            let status = Command::new("sudo")
+                                                .arg("sh")
+                                                .arg("-c")
+                                                .arg(format!("echo '{}' >> /etc/shells", path_str))
+                                                .status();
+
+                                            if let Ok(s) = status {
+                                                if !s.success() {
+                                                    eprintln!("Failed to add to /etc/shells. Aborting.");
+                                                    continue;
+                                                }
+                                            } else {
+                                                eprintln!("Failed to run sudo. Aborting.");
+                                                continue;
+                                            }
+                                        }
+
+                                        // 3. Run chsh
+                                        println!("Changing shell (requires password)...");
                                         let status = Command::new("chsh")
                                             .arg("-s")
                                             .arg(&exe_path)
                                             .status();
 
                                         match status {
-                                            Ok(s) if s.success() => println!("Success! Restart your terminal."),
-                                            _ => println!("Failed to set default shell. You may need to add {} to /etc/shells first.", path_str),
+                                            Ok(s) if s.success() => println!("Success! Please log out and back in."),
+                                            _ => println!("Failed to set default shell."),
                                         }
                                     }
                                 },
@@ -159,18 +192,37 @@ fn main() {
                         }
                     },
                     "help" => {
-                        // Colored Help
-                        let title = "\x1B[1;36m"; // Bold Cyan
-                        let cmd_color = "\x1B[32m"; // Green
+                        // More colorful help menu
+                        let title_style = "\x1B[1;36m"; // Bold Cyan
+                        let header_style = "\x1B[1;33m"; // Bold Yellow
+                        let cmd_style = "\x1B[32m";     // Green
+                        let arg_style = "\x1B[35m";     // Magenta
+                        let desc_style = "\x1B[0m";     // Reset
                         let reset = "\x1B[0m";
 
-                        println!("{}AeroShell Built-in Commands:{}", title, reset);
-                        println!("  {}cd <dir>{}         - Change directory", cmd_color, reset);
-                        println!("  {}exit{}             - Exit shell", cmd_color, reset);
-                        println!("  {}clear{}            - Clear screen", cmd_color, reset);
-                        println!("  {}config{}           - Manage configuration", cmd_color, reset);
-                        println!("  {}theme <name>{}     - Apply a theme", cmd_color, reset);
-                        println!("  {}help{}             - Show this help", cmd_color, reset);
+                        println!("\n{}AeroShell Built-in Commands:{}", title_style, reset);
+                        println!("{}", "=".repeat(30));
+
+                        let commands = [
+                            ("cd", "<dir>", "Change directory"),
+                            ("exit", "", "Exit shell"),
+                            ("clear", "", "Clear screen"),
+                            ("config", "<cmd>", "Manage configuration"),
+                            ("theme", "<name>", "Apply a theme"),
+                            ("help", "", "Show this help"),
+                        ];
+
+                        for (cmd, args, desc) in commands {
+                            println!("  {}{:<10}{} {}{:<10}{} - {}{}{}",
+                                cmd_style, cmd, reset,
+                                arg_style, args, reset,
+                                desc_style, desc, reset
+                            );
+                        }
+                        println!("\n{}Usage Tips:{}", header_style, reset);
+                        println!("  - Use 'config set-default' to make AeroShell your main shell.");
+                        println!("  - Use 'config nano' to edit settings.");
+                        println!();
                     },
                     cmd => {
                         // External command
