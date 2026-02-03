@@ -5,6 +5,7 @@ mod completer;
 use std::process::{Command, Stdio};
 use std::env;
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
 use crate::config::{load_config, get_config_path};
 use crate::prompt::format_prompt;
@@ -97,12 +98,62 @@ fn main() {
                             println!("Usage: aero <command>");
                             println!("Commands:");
                             println!("  config           - Open configuration in editor");
+                            println!("  setdefault       - Set AeroShell as default shell");
                             println!("  update <zipfile> - Update AeroShell from a source zip");
                         } else {
                             match args[0] {
                                 "config" => {
                                     open_config(&config);
                                     config = load_config();
+                                },
+                                "setdefault" => {
+                                    println!("Setting AeroShell as default shell...");
+                                    if let Ok(exe_path) = env::current_exe() {
+                                        let path_str = exe_path.to_string_lossy().to_string();
+
+                                        // 1. Check /etc/shells
+                                        let mut needs_add = true;
+                                        if let Ok(mut file) = fs::File::open("/etc/shells") {
+                                            let mut contents = String::new();
+                                            if file.read_to_string(&mut contents).is_ok() {
+                                                if contents.lines().any(|line| line.trim() == path_str) {
+                                                    needs_add = false;
+                                                }
+                                            }
+                                        }
+
+                                        // 2. Add to /etc/shells if needed
+                                        if needs_add {
+                                            println!("Adding {} to /etc/shells (requires sudo)...", path_str);
+                                            let status = Command::new("sudo")
+                                                .arg("sh")
+                                                .arg("-c")
+                                                .arg(format!("echo '{}' >> /etc/shells", path_str))
+                                                .status();
+
+                                            if let Ok(s) = status {
+                                                if !s.success() {
+                                                    eprintln!("Failed to add to /etc/shells. Aborting.");
+                                                    continue;
+                                                }
+                                            } else {
+                                                eprintln!("Failed to run sudo. Aborting.");
+                                                continue;
+                                            }
+                                        }
+
+                                        // 3. Run chsh
+                                        println!("Changing shell (requires password)...");
+                                        let status = Command::new("chsh")
+                                            .arg("-s")
+                                            .arg(&exe_path)
+                                            .status();
+
+                                        match status {
+                                            Ok(s) if s.success() => println!("Success! Please log out and back in."),
+                                            _ => println!("Failed to set default shell."),
+                                        }
+                                    }
                                 },
                                 "update" if args.len() > 1 => {
                                     let zip_path = args[1];
@@ -133,7 +184,7 @@ fn main() {
                             ("exit", "", "Exit shell"),
                             ("clear", "", "Clear screen"),
                             ("config", "", "Open configuration"),
-                            ("aero", "<cmd>", "Manage AeroShell (update, etc)"),
+                            ("aero", "<cmd>", "Manage AeroShell (setdefault, update, etc)"),
                             ("help", "", "Show this help"),
                         ];
 

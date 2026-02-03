@@ -55,11 +55,15 @@ pub fn load_config() -> Config {
     }
 
     if let Ok(content) = fs::read_to_string(&path) {
-        if let Ok(config) = toml::from_str(&content) {
-            return config;
+        match toml::from_str(&content) {
+            Ok(config) => return config,
+            Err(e) => {
+                // Print specific error details
+                eprintln!("\x1B[31mError parsing config file ({:?}):\x1B[0m", path);
+                eprintln!("{}", e);
+                eprintln!("Using default configuration.");
+            }
         }
-        // Fallback or error handling
-        eprintln!("Warning: Failed to parse config file. Using defaults.");
     }
 
     Config::default()
