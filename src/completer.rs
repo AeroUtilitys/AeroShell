@@ -41,7 +41,7 @@ impl Completer for AeroCompleter {
                                         extra: None,
                                         span: reedline::Span { start, end: pos },
                                         append_whitespace: true,
-                                        match_indices: Some(Vec::new()),
+                                        // Removed match_indices: unavailable in older reedline 0.38
                                     });
                                 }
                             }
@@ -59,7 +59,6 @@ impl Completer for AeroCompleter {
                         extra: None,
                         span: reedline::Span { start, end: pos },
                         append_whitespace: true,
-                         match_indices: Some(Vec::new()),
                     });
                 }
             }
@@ -93,7 +92,6 @@ impl Completer for AeroCompleter {
                                 extra: None,
                                 span: reedline::Span { start, end: pos },
                                 append_whitespace: false,
-                                match_indices: Some(Vec::new()),
                             });
                         }
                     }

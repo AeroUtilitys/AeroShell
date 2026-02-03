@@ -5,8 +5,8 @@ mod completer;
 use std::process::{Command, Stdio};
 use std::env;
 use std::fs;
-use std::io::Read;
 use std::path::PathBuf;
+use std::io::Read;
 use crate::config::{load_config, get_config_path};
 use crate::prompt::format_prompt;
 use crate::completer::AeroCompleter;
@@ -17,6 +17,11 @@ use reedline::{
 };
 
 fn main() {
+    // 0. Setup Global Signal Handler
+    ctrlc::set_handler(move || {
+        // Do nothing.
+    }).expect("Error setting Ctrl-C handler");
+
     let mut config = load_config();
 
     // Setup Reedline
@@ -66,18 +71,41 @@ fn main() {
                     continue;
                 }
 
-                // 3. Parse Input
-                let parts: Vec<&str> = input.split_whitespace().collect();
-                let command = parts[0];
-                let args = &parts[1..];
+                // 3. Parse Input (with quotes support)
+                let parts: Vec<String> = match shlex::split(input) {
+                    Some(args) => args,
+                    None => {
+                        eprintln!("Error: Unmatched quote found.");
+                        continue;
+                    }
+                };
+
+                if parts.is_empty() {
+                    continue;
+                }
+
+                let command = &parts[0];
+                // Convert to Vec<&str> for Command args
+                let args: Vec<&str> = parts[1..].iter().map(|s| s.as_str()).collect();
 
                 // 4. Execute Command
-                match command {
+                match command.as_str() {
                     "cd" => {
                         let new_dir = if args.is_empty() {
                             env::var("HOME").unwrap_or_else(|_| "/".to_string())
                         } else {
-                            args[0].to_string()
+                            // Tilde Expansion
+                            if args[0].starts_with("~") {
+                                let home = env::var("HOME").unwrap_or_else(|_| "/".to_string());
+                                if args[0] == "~" {
+                                    home
+                                } else {
+                                    // replace leading ~ with home
+                                    args[0].replacen("~", &home, 1)
+                                }
+                            } else {
+                                args[0].to_string()
+                            }
                         };
 
                         if let Err(e) = env::set_current_dir(&new_dir) {
@@ -223,8 +251,8 @@ fn main() {
                 }
             }
             Ok(Signal::CtrlD) => {
-                println!("Aborted!");
-                break;
+                println!("Use 'exit' to quit.");
+                continue;
             }
             Ok(Signal::CtrlC) => {
                 println!("^C");
