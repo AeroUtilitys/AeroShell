@@ -19,12 +19,10 @@ cargo build --release
 INSTALL_DIR="$HOME/aeroshell"
 echo "Installing to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
-mkdir -p "$INSTALL_DIR/themes"
 mkdir -p "$INSTALL_DIR/config"
 
 # 4. Copy Files
 cp target/release/aeroshell "$INSTALL_DIR/as"
-cp themes/*.json "$INSTALL_DIR/themes/" 2>/dev/null || true
 # Copy default config if it exists, but don't overwrite user config
 if [ -f "config/config.toml" ] && [ ! -f "$INSTALL_DIR/config/config.toml" ]; then
     cp config/config.toml "$INSTALL_DIR/config/"

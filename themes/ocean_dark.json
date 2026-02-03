@@ -1,5 +1,0 @@
-{
-  "theme_name": "Ocean Dark",
-  "theme_author": "Aero-Community",
-  "prompt_template": "!cyan!%username%!reset!@!white!%hostname%!reset! !blue!%directory%!reset! $ "
-}

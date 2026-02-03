@@ -5,8 +5,8 @@ mod completer;
 use std::process::{Command, Stdio};
 use std::env;
 use std::fs;
-use std::io::Read;
-use crate::config::{load_config, save_config, apply_theme, get_config_path};
+use std::path::PathBuf;
+use crate::config::{load_config, get_config_path};
 use crate::prompt::format_prompt;
 use crate::completer::AeroCompleter;
 
@@ -88,106 +88,31 @@ fn main() {
                         let _ = line_editor.clear_screen();
                     },
                     "config" => {
+                        // Just open the config file
+                        open_config(&config);
+                        config = load_config(); // Reload after edit
+                    },
+                    "aero" => {
                          if args.is_empty() {
-                            println!("Usage: config <command> [args]");
+                            println!("Usage: aero <command>");
                             println!("Commands:");
-                            println!("  nano            - Open config in configured editor");
-                            println!("  set-default     - Set AeroShell as your default shell (adds to /etc/shells)");
-                            println!("  prompt <val>    - Set prompt template");
-                            println!("  username <val>  - Set username");
-                            println!("  editor <val>    - Set default editor");
+                            println!("  config           - Open configuration in editor");
+                            println!("  update <zipfile> - Update AeroShell from a source zip");
                         } else {
                             match args[0] {
-                                "nano" | "edit" => {
-                                    // Open config file in editor
-                                    let editor = &config.editor;
-                                    let config_path = get_config_path();
-
-                                    println!("Opening config in {}...", editor);
-
-                                    let _ = Command::new(editor)
-                                        .arg(config_path)
-                                        .status()
-                                        .map_err(|e| eprintln!("Failed to open editor: {}", e));
-
-                                    // Reload config after edit
+                                "config" => {
+                                    open_config(&config);
                                     config = load_config();
                                 },
-                                "set-default" => {
-                                    println!("Setting AeroShell as default shell...");
-                                    if let Ok(exe_path) = env::current_exe() {
-                                        let path_str = exe_path.to_string_lossy().to_string();
-
-                                        // 1. Check /etc/shells
-                                        let mut needs_add = true;
-                                        if let Ok(mut file) = fs::File::open("/etc/shells") {
-                                            let mut contents = String::new();
-                                            if file.read_to_string(&mut contents).is_ok() {
-                                                if contents.lines().any(|line| line.trim() == path_str) {
-                                                    needs_add = false;
-                                                }
-                                            }
-                                        }
-
-                                        // 2. Add to /etc/shells if needed
-                                        if needs_add {
-                                            println!("Adding {} to /etc/shells (requires sudo)...", path_str);
-                                            let status = Command::new("sudo")
-                                                .arg("sh")
-                                                .arg("-c")
-                                                .arg(format!("echo '{}' >> /etc/shells", path_str))
-                                                .status();
-
-                                            if let Ok(s) = status {
-                                                if !s.success() {
-                                                    eprintln!("Failed to add to /etc/shells. Aborting.");
-                                                    continue;
-                                                }
-                                            } else {
-                                                eprintln!("Failed to run sudo. Aborting.");
-                                                continue;
-                                            }
-                                        }
-
-                                        // 3. Run chsh
-                                        println!("Changing shell (requires password)...");
-                                        let status = Command::new("chsh")
-                                            .arg("-s")
-                                            .arg(&exe_path)
-                                            .status();
-
-                                        match status {
-                                            Ok(s) if s.success() => println!("Success! Please log out and back in."),
-                                            _ => println!("Failed to set default shell."),
-                                        }
+                                "update" if args.len() > 1 => {
+                                    let zip_path = args[1];
+                                    if let Err(e) = update_aeroshell(zip_path) {
+                                        eprintln!("Update failed: {}", e);
+                                    } else {
+                                        println!("Update successful! Restart AeroShell to see changes.");
                                     }
                                 },
-                                "prompt" if args.len() > 1 => {
-                                    let new_prompt = args[1..].join(" ");
-                                    config.prompt_template = new_prompt;
-                                    save_config(&config).unwrap_or_else(|e| eprintln!("Save error: {}", e));
-                                },
-                                "username" if args.len() > 1 => {
-                                    config.username = args[1].to_string();
-                                    save_config(&config).unwrap_or_else(|e| eprintln!("Save error: {}", e));
-                                },
-                                "editor" if args.len() > 1 => {
-                                    config.editor = args[1].to_string();
-                                    save_config(&config).unwrap_or_else(|e| eprintln!("Save error: {}", e));
-                                },
-                                _ => println!("Unknown config command or missing args."),
-                            }
-                        }
-                    },
-                    "theme" => {
-                        if args.is_empty() {
-                            println!("Usage: theme <name>");
-                        } else {
-                            let theme_name = args[0];
-                            if let Err(e) = apply_theme(&mut config, theme_name) {
-                                eprintln!("Error applying theme: {}", e);
-                            } else {
-                                println!("Theme '{}' applied.", theme_name);
+                                _ => println!("Unknown aero command: {}", args[0]),
                             }
                         }
                     },
@@ -207,8 +132,8 @@ fn main() {
                             ("cd", "<dir>", "Change directory"),
                             ("exit", "", "Exit shell"),
                             ("clear", "", "Clear screen"),
-                            ("config", "<cmd>", "Manage configuration"),
-                            ("theme", "<name>", "Apply a theme"),
+                            ("config", "", "Open configuration"),
+                            ("aero", "<cmd>", "Manage AeroShell (update, etc)"),
                             ("help", "", "Show this help"),
                         ];
 
@@ -220,8 +145,8 @@ fn main() {
                             );
                         }
                         println!("\n{}Usage Tips:{}", header_style, reset);
-                        println!("  - Use 'config set-default' to make AeroShell your main shell.");
-                        println!("  - Use 'config nano' to edit settings.");
+                        println!("  - Use 'aero update <zip>' to update from source.");
+                        println!("  - Edit 'config.toml' to change prompt colors (hex codes supported!)");
                         println!();
                     },
                     cmd => {
@@ -259,4 +184,90 @@ fn main() {
             }
         }
     }
+}
+
+fn open_config(config: &crate::config::Config) {
+    let editor = &config.editor;
+    let config_path = get_config_path();
+
+    println!("Opening config in {}...", editor);
+
+    let _ = Command::new(editor)
+        .arg(config_path)
+        .status()
+        .map_err(|e| eprintln!("Failed to open editor: {}", e));
+}
+
+fn update_aeroshell(zip_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    println!("Starting update process...");
+
+    // 1. Create temp dir
+    let temp_dir = env::temp_dir().join("aeroshell_update");
+    if temp_dir.exists() {
+        fs::remove_dir_all(&temp_dir)?;
+    }
+    fs::create_dir(&temp_dir)?;
+
+    println!("Extracting {} to {:?}...", zip_path, temp_dir);
+
+    // 2. Unzip
+    let file = fs::File::open(zip_path)?;
+    let mut archive = zip::ZipArchive::new(file)?;
+    archive.extract(&temp_dir)?;
+
+    // Find the source root (might be nested in a folder like aeroshell-main)
+    let entries: Vec<PathBuf> = fs::read_dir(&temp_dir)?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .collect();
+
+    let source_dir = if entries.len() == 1 && entries[0].is_dir() {
+        entries[0].clone()
+    } else {
+        temp_dir.clone()
+    };
+
+    println!("Building new version in {:?}...", source_dir);
+
+    // 3. Build
+    let status = Command::new("cargo")
+        .arg("build")
+        .arg("--release")
+        .current_dir(&source_dir)
+        .status()?;
+
+    if !status.success() {
+        return Err("Build failed".into());
+    }
+
+    // 4. Install (Overwrite current binary)
+    // We need to know where we are installed.
+    // Assuming ~/.aeroshell/as or we can use env::current_exe
+    let current_exe = env::current_exe()?;
+    let new_binary = source_dir.join("target/release/aeroshell");
+
+    if !new_binary.exists() {
+        return Err("Built binary not found".into());
+    }
+
+    println!("Installing new binary to {:?}...", current_exe);
+
+    // Replacing a running binary can be tricky on some OSs (Windows), but on Linux/Mac usually fine
+    // or requires a mv trick.
+    // Try copy first.
+    // Rename current to .old just in case
+    let backup_path = current_exe.with_extension("old");
+    fs::rename(&current_exe, &backup_path)?;
+
+    if let Err(e) = fs::copy(&new_binary, &current_exe) {
+        // Rollback
+        fs::rename(&backup_path, &current_exe)?;
+        return Err(Box::new(e));
+    }
+
+    // Cleanup
+    let _ = fs::remove_file(backup_path); // Delete backup if successful
+    let _ = fs::remove_dir_all(temp_dir); // Cleanup temp
+
+    Ok(())
 }

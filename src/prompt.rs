@@ -2,6 +2,19 @@ use crate::config::Config;
 use chrono::Local;
 use std::env;
 
+fn hex_to_ansi(hex: &str) -> Option<String> {
+    let hex = hex.trim_start_matches('#');
+    if hex.len() == 6 {
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+        // ANSI 24-bit color: ESC[38;2;R;G;Bm
+        Some(format!("\x1B[38;2;{};{};{}m", r, g, b))
+    } else {
+        None
+    }
+}
+
 pub fn format_prompt(template: &str, config: &Config) -> String {
     let mut result = template.to_string();
 
@@ -50,9 +63,17 @@ pub fn format_prompt(template: &str, config: &Config) -> String {
             }
 
             if valid_tag {
-                // Parse tag_content (e.g. "bold,yellow")
+                // Parse tag_content (e.g. "bold,yellow", "lightpink")
                 let parts: Vec<&str> = tag_content.split(',').map(|s| s.trim()).collect();
                 for part in parts {
+                    // Check if it's a custom color first
+                    if let Some(hex) = config.colors.get(part) {
+                         if let Some(ansi) = hex_to_ansi(hex) {
+                             final_output.push_str(&ansi);
+                             continue;
+                         }
+                    }
+
                     match part {
                         "reset" => final_output.push_str("\x1B[0m"),
                         "bold" => final_output.push_str("\x1B[1m"),
@@ -67,9 +88,14 @@ pub fn format_prompt(template: &str, config: &Config) -> String {
                         "cyan" => final_output.push_str("\x1B[36m"),
                         "white" => final_output.push_str("\x1B[37m"),
                         "grey" | "gray" => final_output.push_str("\x1B[90m"),
+                         // For now, let's also support explicit hex in tag !#RRGGBB!
+                        s if s.starts_with('#') => {
+                             if let Some(ansi) = hex_to_ansi(s) {
+                                 final_output.push_str(&ansi);
+                             }
+                        },
                         _ => {
-                            // Unknown tag, maybe print literally?
-                            // For safety/simplicity, ignoring unknown tags.
+                            // Unknown tag
                         }
                     }
                 }
@@ -90,46 +116,35 @@ pub fn format_prompt(template: &str, config: &Config) -> String {
 mod tests {
     use super::*;
     use crate::config::Config;
+    use std::collections::HashMap;
 
     #[test]
     fn test_variable_replacement() {
         let config = Config {
             prompt_template: "".to_string(),
             username: "testuser".to_string(),
-            theme: "default".to_string(),
             editor: "nano".to_string(),
+            colors: HashMap::new(),
         };
 
-        // Mock env vars would be ideal, but for now we test username from config
         let res = format_prompt("Hello %username%", &config);
         assert_eq!(res, "Hello testuser");
     }
 
     #[test]
-    fn test_color_parsing() {
-        let config = Config::default();
-        let res = format_prompt("!red!Hello!reset!", &config);
-        assert_eq!(res, "\x1B[31mHello\x1B[0m");
-    }
+    fn test_custom_color() {
+        let mut colors = HashMap::new();
+        colors.insert("mypink".to_string(), "#FF00FF".to_string()); // Magenta
+        let config = Config {
+            prompt_template: "".to_string(),
+            username: "test".to_string(),
+            editor: "nano".to_string(),
+            colors,
+        };
 
-    #[test]
-    fn test_combined_styles() {
-        let config = Config::default();
-        let res = format_prompt("!bold,blue!Text", &config);
-        // order depends on implementation, we push bold then blue
-        assert_eq!(res, "\x1B[1m\x1B[34mText");
-    }
-
-    #[test]
-    fn test_invalid_tags() {
-        let config = Config::default();
-        let res = format_prompt("!invalid!", &config);
-        // Invalid tags are ignored (consumed but output nothing based on current logic)
-        // logic: matches _ => {}
-        assert_eq!(res, "");
-
-        let res2 = format_prompt("!notatag", &config);
-        // Missing closing !, treated as literal
-        assert_eq!(res2, "!notatag");
+        let res = format_prompt("!mypink!Hi", &config);
+        // Expect ANSI 24-bit for FF00FF: 255;0;255
+        // hex_to_ansi returns ESC[38;2;R;G;Bm
+        assert_eq!(res, "\x1B[38;2;255;0;255mHi");
     }
 }

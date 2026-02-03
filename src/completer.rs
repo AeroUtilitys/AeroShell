@@ -24,7 +24,6 @@ impl Completer for AeroCompleter {
         let mut suggestions = Vec::new();
 
         // 1. Command Completion (if it's the first word)
-        // Check if there's any whitespace before our current word
         let is_first_word = line[..start].trim().is_empty();
 
         if is_first_word {
@@ -51,7 +50,7 @@ impl Completer for AeroCompleter {
                 }
             }
             // Add built-ins
-            for builtin in ["cd", "exit", "clear", "help", "config", "theme"] {
+            for builtin in ["cd", "exit", "clear", "help", "config", "aero"] {
                 if builtin.starts_with(prefix) {
                     suggestions.push(reedline::Suggestion {
                         value: builtin.to_string(),
@@ -66,7 +65,6 @@ impl Completer for AeroCompleter {
             }
         } else {
             // 2. File Path Completion
-            // Basic implementation:
             let path_prefix = prefix;
             let (dir, file_part) = if path_prefix.ends_with('/') {
                 (path_prefix, "")
@@ -103,7 +101,6 @@ impl Completer for AeroCompleter {
             }
         }
 
-        // Deduplicate
         suggestions.sort_by(|a, b| a.value.cmp(&b.value));
         suggestions.dedup_by(|a, b| a.value == b.value);
 
