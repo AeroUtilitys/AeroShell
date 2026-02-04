@@ -23,13 +23,15 @@ pub struct ConfigSection {
 pub struct ThemeSection {
     pub prompt_template: String,
     pub autocomplete: String,
-    pub typing: String,     // Cursor/Text color
-    pub typingtext: String, // Buffer text color
+    pub typing: String,
+    pub typingtext: String,
     pub header: String,
     pub subheader: String,
     pub body: String,
     pub active: String,
     pub disable: String,
+    #[serde(default)]
+    pub files: HashMap<String, String>,
 }
 
 impl Default for RootConfig {
@@ -47,11 +49,24 @@ impl Default for RootConfig {
         colors.insert("green".to_string(), "#32CD32".to_string());
         colors.insert("red".to_string(), "#FF0000".to_string());
         colors.insert("grey".to_string(), "#808080".to_string());
+        colors.insert("blue".to_string(), "#0000FF".to_string());
+        colors.insert("yellow".to_string(), "#FFFF00".to_string());
+
+        let mut files = HashMap::new();
+        files.insert("directory".to_string(), "blue".to_string());
+        files.insert("executable".to_string(), "orange".to_string());
+        files.insert("python".to_string(), "teal".to_string()); // .py
+        files.insert("shellscript".to_string(), "lime".to_string()); // .sh
+        files.insert("rust".to_string(), "red".to_string()); // .rs
+        files.insert("javascript".to_string(), "yellow".to_string()); // .js
+        files.insert("toml".to_string(), "pink".to_string());
+        files.insert("json".to_string(), "pink".to_string());
+        files.insert("default".to_string(), "white".to_string());
 
         Self {
             config: ConfigSection {
                 username,
-                editor: "nano".to_string(), // User asked for micro in example, but nano default is safer if micro isn't installed. Sticking to safer default or "nano" as per previous constraint, but updating to "micro" if that was a preference? I'll keep "nano" as safe default unless explicitly told to change default. Actually user snippet said 'editor = "micro"'. I will use "nano" as robust default but user can change it.
+                editor: "nano".to_string(),
             },
             theme: ThemeSection {
                 prompt_template: "!teal!aeroshell@!lightpink!%username%!white!<>!purple!%directory%!green!:!reset! ".to_string(),
@@ -63,6 +78,7 @@ impl Default for RootConfig {
                 body: "white".to_string(),
                 active: "green".to_string(),
                 disable: "red".to_string(),
+                files,
             },
             colors,
         }
@@ -127,6 +143,9 @@ pub fn save_config(config: &RootConfig) -> std::io::Result<()> {
          #\n\
          # Available styles:\n\
          #   bold, italic, underline, reset\n\
+         #\n\
+         # File Type Colors:\n\
+         #   Configure colors for 'ls' in [theme.files]\n\
          #\n\
          {}\n",
         content

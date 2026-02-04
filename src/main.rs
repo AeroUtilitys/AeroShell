@@ -7,6 +7,9 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::io::Read;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+
 use crate::config::{load_config, get_config_path, RootConfig};
 use crate::prompt::format_prompt;
 use crate::completer::AeroCompleter;
@@ -47,20 +50,18 @@ fn get_style_from_config(color_name: &str, config: &RootConfig) -> nu_ansi_term:
         "magenta" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::Magenta),
         "cyan" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::Cyan),
         "white" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::White),
-        "grey" | "gray" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::LightGray), // Or DarkGray depending on preference
-        _ => nu_ansi_term::Style::default(), // Default if not found
+        "grey" | "gray" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::LightGray),
+        _ => nu_ansi_term::Style::default(),
     }
 }
 
-// Convert config color to simple ANSI string for help menu manually
+// Convert config color to simple ANSI string
 fn get_ansi_from_config(color_name: &str, config: &RootConfig) -> String {
-    // 1. Hex
     if let Some(hex) = config.colors.get(color_name) {
         if let Some((r, g, b)) = hex_to_rgb(hex) {
             return format!("\x1B[38;2;{};{};{}m", r, g, b);
         }
     }
-    // 2. Built-in
     match color_name {
         "black" => "\x1B[30m".to_string(),
         "red" => "\x1B[31m".to_string(),
@@ -75,20 +76,74 @@ fn get_ansi_from_config(color_name: &str, config: &RootConfig) -> String {
     }
 }
 
+fn cmd_ls(args: &[&str], config: &RootConfig) {
+    let target = if args.is_empty() { "." } else { args[0] };
+
+    // Read dir
+    match fs::read_dir(target) {
+        Ok(entries) => {
+            let mut entries: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+            // Sort by name
+            entries.sort_by_key(|e| e.file_name());
+
+            for entry in entries {
+                let path = entry.path();
+                let name = entry.file_name().to_string_lossy().to_string();
+                let metadata = entry.metadata().ok();
+
+                let mut color_key = "default";
+
+                if path.is_dir() {
+                    color_key = "directory";
+                } else if let Some(m) = metadata {
+                    // Check executable bit (Unix)
+                    #[cfg(unix)]
+                    {
+                        if m.permissions().mode() & 0o111 != 0 {
+                            color_key = "executable";
+                        }
+                    }
+
+                    // Check extension
+                    if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+                        match ext {
+                            "py" => color_key = "python",
+                            "sh" => color_key = "shellscript",
+                            "rs" => color_key = "rust",
+                            "js" => color_key = "javascript",
+                            "toml" => color_key = "toml",
+                            "json" => color_key = "json",
+                            _ => {} // keep prev (e.g. executable or default)
+                        }
+                    }
+                }
+
+                // Lookup color name in [theme.files], default to global default
+                let file_color_name = config.theme.files.get(color_key)
+                    .or_else(|| config.theme.files.get("default"))
+                    .map(|s| s.as_str())
+                    .unwrap_or("white");
+
+                let color_ansi = get_ansi_from_config(file_color_name, config);
+                let reset = "\x1B[0m";
+
+                print!("{}{}{}  ", color_ansi, name, reset);
+            }
+            println!();
+        },
+        Err(e) => eprintln!("ls: {}", e),
+    }
+}
+
 fn main() {
-    // 0. Setup Global Signal Handler
-    ctrlc::set_handler(move || {
-        // Do nothing.
-    }).expect("Error setting Ctrl-C handler");
+    ctrlc::set_handler(move || {}).expect("Error setting Ctrl-C handler");
 
     let mut config = load_config();
 
-    // 3. Export Environment Variables (System-wide colors)
-    // Export [colors]
+    // Export Env Vars
     for (name, hex) in &config.colors {
         env::set_var(format!("AERO_COLOR_{}", name.to_uppercase()), hex);
     }
-    // Export [theme] parts (names of colors)
     let t = &config.theme;
     env::set_var("AERO_THEME_AUTOCOMPLETE", &t.autocomplete);
     env::set_var("AERO_THEME_TYPING", &t.typing);
@@ -99,7 +154,6 @@ fn main() {
     env::set_var("AERO_THEME_ACTIVE", &t.active);
     env::set_var("AERO_THEME_DISABLE", &t.disable);
 
-    // Setup Reedline
     let history_path = env::var("HOME")
         .map(|h| format!("{}/.aeroshell_history", h))
         .unwrap_or_else(|_| ".aeroshell_history".to_string());
@@ -109,11 +163,7 @@ fn main() {
             .expect("Error configuring history with file"),
     );
 
-    // Apply styles
     let hint_style = get_style_from_config(&config.theme.autocomplete, &config);
-    // Note: Reedline doesn't support changing the "typing text" color dynamically easily
-    // without a custom painter, but we can set the hint style easily.
-    // We will stick to configuring the hinter for now.
 
     let mut line_editor = Reedline::create()
         .with_history(history)
@@ -121,7 +171,6 @@ fn main() {
         .with_completer(Box::new(AeroCompleter));
 
     loop {
-        // 1. Generate Prompt
         let prompt_str = format_prompt(&config.theme.prompt_template, &config);
 
         struct AeroPrompt(String);
@@ -152,7 +201,6 @@ fn main() {
                     continue;
                 }
 
-                // 3. Parse Input (with quotes support)
                 let parts: Vec<String> = match shlex::split(input) {
                     Some(args) => args,
                     None => {
@@ -189,6 +237,9 @@ fn main() {
                             eprintln!("cd: {}", e);
                         }
                     },
+                    "ls" => {
+                        cmd_ls(&args, &config);
+                    },
                     "exit" => break,
                     "clear" => {
                         let _ = line_editor.clear_screen();
@@ -198,12 +249,19 @@ fn main() {
                         config = load_config();
                     },
                     "aero" => {
+                         let header_c = get_ansi_from_config(&config.theme.header, &config);
+                         let subheader_c = get_ansi_from_config(&config.theme.subheader, &config);
+                         let body_c = get_ansi_from_config(&config.theme.body, &config);
+                         let active_c = get_ansi_from_config(&config.theme.active, &config);
+                         let err_c = get_ansi_from_config(&config.theme.disable, &config);
+                         let reset = "\x1B[0m";
+
                          if args.is_empty() {
-                            println!("Usage: aero <command>");
-                            println!("Commands:");
-                            println!("  config           - Open configuration in editor");
-                            println!("  setdefault       - Set AeroShell as default shell");
-                            println!("  update <zipfile> - Update AeroShell from a source zip");
+                            println!("Usage: {}aero <command>{}", active_c, reset);
+                            println!("{}Commands:{}", header_c, reset);
+                            println!("  {}config{}           - {}Open configuration in editor{}", subheader_c, reset, body_c, reset);
+                            println!("  {}setdefault{}       - {}Set AeroShell as default shell{}", subheader_c, reset, body_c, reset);
+                            println!("  {}update <zipfile>{} - {}Update AeroShell from a source zip{}", subheader_c, reset, body_c, reset);
                         } else {
                             match args[0] {
                                 "config" => {
@@ -211,7 +269,7 @@ fn main() {
                                     config = load_config();
                                 },
                                 "setdefault" => {
-                                    println!("Setting AeroShell as default shell...");
+                                    println!("{}Setting AeroShell as default shell...{}", header_c, reset);
                                     if let Ok(exe_path) = env::current_exe() {
                                         let path_str = exe_path.to_string_lossy().to_string();
 
@@ -226,7 +284,7 @@ fn main() {
                                         }
 
                                         if needs_add {
-                                            println!("Adding {} to /etc/shells (requires sudo)...", path_str);
+                                            println!("{}Adding {} to /etc/shells (requires sudo)...{}", body_c, path_str, reset);
                                             let status = Command::new("sudo")
                                                 .arg("sh")
                                                 .arg("-c")
@@ -235,41 +293,40 @@ fn main() {
 
                                             if let Ok(s) = status {
                                                 if !s.success() {
-                                                    eprintln!("Failed to add to /etc/shells. Aborting.");
+                                                    eprintln!("{}Failed to add to /etc/shells. Aborting.{}", err_c, reset);
                                                     continue;
                                                 }
                                             } else {
-                                                eprintln!("Failed to run sudo. Aborting.");
+                                                eprintln!("{}Failed to run sudo. Aborting.{}", err_c, reset);
                                                 continue;
                                             }
                                         }
 
-                                        println!("Changing shell (requires password)...");
+                                        println!("{}Changing shell (requires password)...{}", body_c, reset);
                                         let status = Command::new("chsh")
                                             .arg("-s")
                                             .arg(&exe_path)
                                             .status();
 
                                         match status {
-                                            Ok(s) if s.success() => println!("Success! Please log out and back in."),
-                                            _ => println!("Failed to set default shell."),
+                                            Ok(s) if s.success() => println!("{}Success! Please log out and back in.{}", active_c, reset),
+                                            _ => println!("{}Failed to set default shell.{}", err_c, reset),
                                         }
                                     }
                                 },
                                 "update" if args.len() > 1 => {
                                     let zip_path = args[1];
                                     if let Err(e) = update_aeroshell(zip_path) {
-                                        eprintln!("Update failed: {}", e);
+                                        eprintln!("{}Update failed: {}{}", err_c, e, reset);
                                     } else {
-                                        println!("Update successful! Restart AeroShell to see changes.");
+                                        println!("{}Update successful! Restart AeroShell to see changes.{}", active_c, reset);
                                     }
                                 },
-                                _ => println!("Unknown aero command: {}", args[0]),
+                                _ => println!("{}Unknown aero command: {}{}", err_c, args[0], reset),
                             }
                         }
                     },
                     "help" => {
-                        // Apply config colors
                         let header_c = get_ansi_from_config(&config.theme.header, &config);
                         let subheader_c = get_ansi_from_config(&config.theme.subheader, &config);
                         let body_c = get_ansi_from_config(&config.theme.body, &config);
@@ -281,10 +338,11 @@ fn main() {
 
                         let commands = [
                             ("cd", "<dir>", "Change directory"),
+                            ("ls", "[dir]", "List files (colored)"),
                             ("exit", "", "Exit shell"),
                             ("clear", "", "Clear screen"),
                             ("config", "", "Open configuration"),
-                            ("aero", "<cmd>", "Manage AeroShell (setdefault, update, etc)"),
+                            ("aero", "<cmd>", "Manage AeroShell"),
                             ("help", "", "Show this help"),
                         ];
 
@@ -351,7 +409,6 @@ fn open_config(config: &crate::config::RootConfig) {
 fn update_aeroshell(zip_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting update process...");
 
-    // 1. Create temp dir
     let temp_dir = env::temp_dir().join("aeroshell_update");
     if temp_dir.exists() {
         fs::remove_dir_all(&temp_dir)?;
@@ -360,12 +417,10 @@ fn update_aeroshell(zip_path: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Extracting {} to {:?}...", zip_path, temp_dir);
 
-    // 2. Unzip
     let file = fs::File::open(zip_path)?;
     let mut archive = zip::ZipArchive::new(file)?;
     archive.extract(&temp_dir)?;
 
-    // Find the source root
     let entries: Vec<PathBuf> = fs::read_dir(&temp_dir)?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
@@ -379,7 +434,6 @@ fn update_aeroshell(zip_path: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Building new version in {:?}...", source_dir);
 
-    // 3. Build
     let status = Command::new("cargo")
         .arg("build")
         .arg("--release")
@@ -390,7 +444,6 @@ fn update_aeroshell(zip_path: &str) -> Result<(), Box<dyn std::error::Error>> {
         return Err("Build failed".into());
     }
 
-    // 4. Install
     let current_exe = env::current_exe()?;
     let new_binary = source_dir.join("target/release/aeroshell");
 
