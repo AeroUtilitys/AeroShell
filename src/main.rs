@@ -7,7 +7,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::io::Read;
-use crate::config::{load_config, get_config_path};
+use crate::config::{load_config, get_config_path, RootConfig};
 use crate::prompt::format_prompt;
 use crate::completer::AeroCompleter;
 
@@ -16,6 +16,65 @@ use reedline::{
     FileBackedHistory
 };
 
+fn hex_to_rgb(hex: &str) -> Option<(u8, u8, u8)> {
+    let hex = hex.trim_start_matches('#');
+    if hex.len() == 6 {
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+        Some((r, g, b))
+    } else {
+        None
+    }
+}
+
+// Helper to convert config color name to nu-ansi-term Style for Reedline
+fn get_style_from_config(color_name: &str, config: &RootConfig) -> nu_ansi_term::Style {
+    // 1. Check custom colors (Hex)
+    if let Some(hex) = config.colors.get(color_name) {
+        if let Some((r, g, b)) = hex_to_rgb(hex) {
+            return nu_ansi_term::Style::new().fg(nu_ansi_term::Color::Rgb(r, g, b));
+        }
+    }
+
+    // 2. Check built-ins
+    match color_name {
+        "black" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::Black),
+        "red" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::Red),
+        "green" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::Green),
+        "yellow" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::Yellow),
+        "blue" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::Blue),
+        "magenta" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::Magenta),
+        "cyan" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::Cyan),
+        "white" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::White),
+        "grey" | "gray" => nu_ansi_term::Style::new().fg(nu_ansi_term::Color::LightGray), // Or DarkGray depending on preference
+        _ => nu_ansi_term::Style::default(), // Default if not found
+    }
+}
+
+// Convert config color to simple ANSI string for help menu manually
+fn get_ansi_from_config(color_name: &str, config: &RootConfig) -> String {
+    // 1. Hex
+    if let Some(hex) = config.colors.get(color_name) {
+        if let Some((r, g, b)) = hex_to_rgb(hex) {
+            return format!("\x1B[38;2;{};{};{}m", r, g, b);
+        }
+    }
+    // 2. Built-in
+    match color_name {
+        "black" => "\x1B[30m".to_string(),
+        "red" => "\x1B[31m".to_string(),
+        "green" => "\x1B[32m".to_string(),
+        "yellow" => "\x1B[33m".to_string(),
+        "blue" => "\x1B[34m".to_string(),
+        "magenta" => "\x1B[35m".to_string(),
+        "cyan" => "\x1B[36m".to_string(),
+        "white" => "\x1B[37m".to_string(),
+        "grey" | "gray" => "\x1B[90m".to_string(),
+        _ => "\x1B[0m".to_string(),
+    }
+}
+
 fn main() {
     // 0. Setup Global Signal Handler
     ctrlc::set_handler(move || {
@@ -23,6 +82,22 @@ fn main() {
     }).expect("Error setting Ctrl-C handler");
 
     let mut config = load_config();
+
+    // 3. Export Environment Variables (System-wide colors)
+    // Export [colors]
+    for (name, hex) in &config.colors {
+        env::set_var(format!("AERO_COLOR_{}", name.to_uppercase()), hex);
+    }
+    // Export [theme] parts (names of colors)
+    let t = &config.theme;
+    env::set_var("AERO_THEME_AUTOCOMPLETE", &t.autocomplete);
+    env::set_var("AERO_THEME_TYPING", &t.typing);
+    env::set_var("AERO_THEME_TYPINGTEXT", &t.typingtext);
+    env::set_var("AERO_THEME_HEADER", &t.header);
+    env::set_var("AERO_THEME_SUBHEADER", &t.subheader);
+    env::set_var("AERO_THEME_BODY", &t.body);
+    env::set_var("AERO_THEME_ACTIVE", &t.active);
+    env::set_var("AERO_THEME_DISABLE", &t.disable);
 
     // Setup Reedline
     let history_path = env::var("HOME")
@@ -34,14 +109,20 @@ fn main() {
             .expect("Error configuring history with file"),
     );
 
+    // Apply styles
+    let hint_style = get_style_from_config(&config.theme.autocomplete, &config);
+    // Note: Reedline doesn't support changing the "typing text" color dynamically easily
+    // without a custom painter, but we can set the hint style easily.
+    // We will stick to configuring the hinter for now.
+
     let mut line_editor = Reedline::create()
         .with_history(history)
-        .with_hinter(Box::new(DefaultHinter::default().with_style(nu_ansi_term::Style::new().italic().fg(nu_ansi_term::Color::Cyan))))
+        .with_hinter(Box::new(DefaultHinter::default().with_style(hint_style)))
         .with_completer(Box::new(AeroCompleter));
 
     loop {
         // 1. Generate Prompt
-        let prompt_str = format_prompt(&config.prompt_template, &config);
+        let prompt_str = format_prompt(&config.theme.prompt_template, &config);
 
         struct AeroPrompt(String);
         impl reedline::Prompt for AeroPrompt {
@@ -85,22 +166,18 @@ fn main() {
                 }
 
                 let command = &parts[0];
-                // Convert to Vec<&str> for Command args
                 let args: Vec<&str> = parts[1..].iter().map(|s| s.as_str()).collect();
 
-                // 4. Execute Command
                 match command.as_str() {
                     "cd" => {
                         let new_dir = if args.is_empty() {
                             env::var("HOME").unwrap_or_else(|_| "/".to_string())
                         } else {
-                            // Tilde Expansion
                             if args[0].starts_with("~") {
                                 let home = env::var("HOME").unwrap_or_else(|_| "/".to_string());
                                 if args[0] == "~" {
                                     home
                                 } else {
-                                    // replace leading ~ with home
                                     args[0].replacen("~", &home, 1)
                                 }
                             } else {
@@ -117,9 +194,8 @@ fn main() {
                         let _ = line_editor.clear_screen();
                     },
                     "config" => {
-                        // Just open the config file
                         open_config(&config);
-                        config = load_config(); // Reload after edit
+                        config = load_config();
                     },
                     "aero" => {
                          if args.is_empty() {
@@ -139,7 +215,6 @@ fn main() {
                                     if let Ok(exe_path) = env::current_exe() {
                                         let path_str = exe_path.to_string_lossy().to_string();
 
-                                        // 1. Check /etc/shells
                                         let mut needs_add = true;
                                         if let Ok(mut file) = fs::File::open("/etc/shells") {
                                             let mut contents = String::new();
@@ -150,7 +225,6 @@ fn main() {
                                             }
                                         }
 
-                                        // 2. Add to /etc/shells if needed
                                         if needs_add {
                                             println!("Adding {} to /etc/shells (requires sudo)...", path_str);
                                             let status = Command::new("sudo")
@@ -170,7 +244,6 @@ fn main() {
                                             }
                                         }
 
-                                        // 3. Run chsh
                                         println!("Changing shell (requires password)...");
                                         let status = Command::new("chsh")
                                             .arg("-s")
@@ -196,15 +269,14 @@ fn main() {
                         }
                     },
                     "help" => {
-                        // More colorful help menu
-                        let title_style = "\x1B[1;36m"; // Bold Cyan
-                        let header_style = "\x1B[1;33m"; // Bold Yellow
-                        let cmd_style = "\x1B[32m";     // Green
-                        let arg_style = "\x1B[35m";     // Magenta
-                        let desc_style = "\x1B[0m";     // Reset
+                        // Apply config colors
+                        let header_c = get_ansi_from_config(&config.theme.header, &config);
+                        let subheader_c = get_ansi_from_config(&config.theme.subheader, &config);
+                        let body_c = get_ansi_from_config(&config.theme.body, &config);
+                        let active_c = get_ansi_from_config(&config.theme.active, &config);
                         let reset = "\x1B[0m";
 
-                        println!("\n{}AeroShell Built-in Commands:{}", title_style, reset);
+                        println!("\n{}AeroShell Built-in Commands:{}", header_c, reset);
                         println!("{}", "=".repeat(30));
 
                         let commands = [
@@ -218,18 +290,17 @@ fn main() {
 
                         for (cmd, args, desc) in commands {
                             println!("  {}{:<10}{} {}{:<10}{} - {}{}{}",
-                                cmd_style, cmd, reset,
-                                arg_style, args, reset,
-                                desc_style, desc, reset
+                                active_c, cmd, reset,
+                                subheader_c, args, reset,
+                                body_c, desc, reset
                             );
                         }
-                        println!("\n{}Usage Tips:{}", header_style, reset);
+                        println!("\n{}Usage Tips:{}", header_c, reset);
                         println!("  - Use 'aero update <zip>' to update from source.");
                         println!("  - Edit 'config.toml' to change prompt colors (hex codes supported!)");
                         println!();
                     },
                     cmd => {
-                        // External command
                         let child_result = Command::new(cmd)
                             .args(args)
                             .stdin(Stdio::inherit())
@@ -265,8 +336,8 @@ fn main() {
     }
 }
 
-fn open_config(config: &crate::config::Config) {
-    let editor = &config.editor;
+fn open_config(config: &crate::config::RootConfig) {
+    let editor = &config.config.editor;
     let config_path = get_config_path();
 
     println!("Opening config in {}...", editor);
@@ -294,7 +365,7 @@ fn update_aeroshell(zip_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let mut archive = zip::ZipArchive::new(file)?;
     archive.extract(&temp_dir)?;
 
-    // Find the source root (might be nested in a folder like aeroshell-main)
+    // Find the source root
     let entries: Vec<PathBuf> = fs::read_dir(&temp_dir)?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
@@ -319,9 +390,7 @@ fn update_aeroshell(zip_path: &str) -> Result<(), Box<dyn std::error::Error>> {
         return Err("Build failed".into());
     }
 
-    // 4. Install (Overwrite current binary)
-    // We need to know where we are installed.
-    // Assuming ~/.aeroshell/as or we can use env::current_exe
+    // 4. Install
     let current_exe = env::current_exe()?;
     let new_binary = source_dir.join("target/release/aeroshell");
 
@@ -331,22 +400,16 @@ fn update_aeroshell(zip_path: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Installing new binary to {:?}...", current_exe);
 
-    // Replacing a running binary can be tricky on some OSs (Windows), but on Linux/Mac usually fine
-    // or requires a mv trick.
-    // Try copy first.
-    // Rename current to .old just in case
     let backup_path = current_exe.with_extension("old");
     fs::rename(&current_exe, &backup_path)?;
 
     if let Err(e) = fs::copy(&new_binary, &current_exe) {
-        // Rollback
         fs::rename(&backup_path, &current_exe)?;
         return Err(Box::new(e));
     }
 
-    // Cleanup
-    let _ = fs::remove_file(backup_path); // Delete backup if successful
-    let _ = fs::remove_dir_all(temp_dir); // Cleanup temp
+    let _ = fs::remove_file(backup_path);
+    let _ = fs::remove_dir_all(temp_dir);
 
     Ok(())
 }
