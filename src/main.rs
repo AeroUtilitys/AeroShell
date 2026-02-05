@@ -16,7 +16,7 @@ use crate::completer::AeroCompleter;
 
 use reedline::{
     Reedline, Signal, DefaultHinter,
-    FileBackedHistory
+    FileBackedHistory, Color
 };
 
 fn hex_to_rgb(hex: &str) -> Option<(u8, u8, u8)> {
@@ -91,35 +91,45 @@ fn cmd_ls(args: &[&str], config: &RootConfig) {
                 let name = entry.file_name().to_string_lossy().to_string();
                 let metadata = entry.metadata().ok();
 
-                let mut color_key = "default";
+                let mut color_key = String::from("default");
 
                 if path.is_dir() {
-                    color_key = "directory";
+                    color_key = String::from("directory");
                 } else if let Some(m) = metadata {
-                    // Check executable bit (Unix)
+                    let mut is_exe = false;
                     #[cfg(unix)]
                     {
                         if m.permissions().mode() & 0o111 != 0 {
-                            color_key = "executable";
+                            is_exe = true;
                         }
                     }
 
-                    // Check extension
+                    if is_exe {
+                        color_key = String::from("executable");
+                    }
+
+                    // Check extension dynamically against config
                     if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
-                        match ext {
-                            "py" => color_key = "python",
-                            "sh" => color_key = "shellscript",
-                            "rs" => color_key = "rust",
-                            "js" => color_key = "javascript",
-                            "toml" => color_key = "toml",
-                            "json" => color_key = "json",
-                            _ => {} // keep prev (e.g. executable or default)
+                        let file_key = format!("file.{}", ext);
+                        if config.theme.files.contains_key(&file_key) {
+                            color_key = file_key;
+                        } else if config.theme.files.contains_key(ext) {
+                            color_key = ext.to_string();
+                        } else {
+                            // Legacy/Helper mappings
+                            match ext {
+                                "py" => if config.theme.files.contains_key("python") { color_key = String::from("python"); },
+                                "sh" => if config.theme.files.contains_key("shellscript") { color_key = String::from("shellscript"); },
+                                "rs" => if config.theme.files.contains_key("rust") { color_key = String::from("rust"); },
+                                "js" => if config.theme.files.contains_key("javascript") { color_key = String::from("javascript"); },
+                                _ => {}
+                            }
                         }
                     }
                 }
 
-                // Lookup color name in [theme.files], default to global default
-                let file_color_name = config.theme.files.get(color_key)
+                // Lookup color name
+                let file_color_name = config.theme.files.get(&color_key)
                     .or_else(|| config.theme.files.get("default"))
                     .map(|s| s.as_str())
                     .unwrap_or("white");

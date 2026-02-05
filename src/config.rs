@@ -55,13 +55,16 @@ impl Default for RootConfig {
         let mut files = HashMap::new();
         files.insert("directory".to_string(), "blue".to_string());
         files.insert("executable".to_string(), "orange".to_string());
-        files.insert("python".to_string(), "teal".to_string()); // .py
-        files.insert("shellscript".to_string(), "lime".to_string()); // .sh
-        files.insert("rust".to_string(), "red".to_string()); // .rs
-        files.insert("javascript".to_string(), "yellow".to_string()); // .js
+        files.insert("python".to_string(), "teal".to_string());
+        files.insert("shellscript".to_string(), "lime".to_string());
+        files.insert("rust".to_string(), "red".to_string());
+        files.insert("javascript".to_string(), "yellow".to_string());
         files.insert("toml".to_string(), "pink".to_string());
         files.insert("json".to_string(), "pink".to_string());
         files.insert("default".to_string(), "white".to_string());
+        // Example custom file types as requested
+        files.insert("file.zip".to_string(), "pink".to_string());
+        files.insert("file.iso".to_string(), "pink".to_string());
 
         Self {
             config: ConfigSection {
@@ -145,7 +148,8 @@ pub fn save_config(config: &RootConfig) -> std::io::Result<()> {
          #   bold, italic, underline, reset\n\
          #\n\
          # File Type Colors:\n\
-         #   Configure colors for 'ls' in [theme.files]\n\
+         #   Configure colors for 'ls' in [theme.files].\n\
+         #   Use keys like 'python' (for .py), 'directory', or 'file.zip' (for .zip).\n\
          #\n\
          {}\n",
         content
