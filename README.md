@@ -13,8 +13,10 @@ A customizable, Rust-based shell for macOS and Linux.
 ## Installation
 
 **Automatic Install**
+
 *Latest*
 `curl -sSf https://raw.githubusercontent.com/AeroUtilitys/AeroShell/main/bootstrap.sh | bash`
+
 *Dev (Nightly)*
 `curl -sSf https://raw.githubusercontent.com/AeroUtilitys/AeroShell/dev/bootstrap.sh | bash`
 
