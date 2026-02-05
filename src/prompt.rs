@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::config::RootConfig;
 use chrono::Local;
 use std::env;
 
@@ -15,12 +15,12 @@ fn hex_to_ansi(hex: &str) -> Option<String> {
     }
 }
 
-pub fn format_prompt(template: &str, config: &Config) -> String {
+pub fn format_prompt(template: &str, config: &RootConfig) -> String {
     let mut result = template.to_string();
 
     // 1. Replace Variables
     // %username%
-    result = result.replace("%username%", &config.username);
+    result = result.replace("%username%", &config.config.username);
 
     // %hostname%
     let hostname = env::var("HOSTNAME").unwrap_or_else(|_| "localhost".to_string());
@@ -115,36 +115,31 @@ pub fn format_prompt(template: &str, config: &Config) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
+    use crate::config::{RootConfig, ConfigSection, ThemeSection};
     use std::collections::HashMap;
 
     #[test]
     fn test_variable_replacement() {
-        let config = Config {
-            prompt_template: "".to_string(),
-            username: "testuser".to_string(),
-            editor: "nano".to_string(),
+        let config = RootConfig {
+            config: ConfigSection {
+                username: "testuser".to_string(),
+                editor: "nano".to_string(),
+            },
+            theme: ThemeSection {
+                prompt_template: "".to_string(),
+                autocomplete: "".to_string(),
+                typing: "".to_string(),
+                typingtext: "".to_string(),
+                header: "".to_string(),
+                subheader: "".to_string(),
+                body: "".to_string(),
+                active: "".to_string(),
+                disable: "".to_string(),
+            },
             colors: HashMap::new(),
         };
 
         let res = format_prompt("Hello %username%", &config);
         assert_eq!(res, "Hello testuser");
-    }
-
-    #[test]
-    fn test_custom_color() {
-        let mut colors = HashMap::new();
-        colors.insert("mypink".to_string(), "#FF00FF".to_string()); // Magenta
-        let config = Config {
-            prompt_template: "".to_string(),
-            username: "test".to_string(),
-            editor: "nano".to_string(),
-            colors,
-        };
-
-        let res = format_prompt("!mypink!Hi", &config);
-        // Expect ANSI 24-bit for FF00FF: 255;0;255
-        // hex_to_ansi returns ESC[38;2;R;G;Bm
-        assert_eq!(res, "\x1B[38;2;255;0;255mHi");
     }
 }

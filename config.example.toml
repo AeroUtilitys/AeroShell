@@ -1,0 +1,57 @@
+# AeroShell Configuration
+# -----------------------
+# Color Selector
+# Define custom colors here using hex codes (e.g. #RRGGBB)
+# usage in prompt: !colorname!
+#
+# Available built-in colors (ANSI):
+#   black, red, green, yellow, blue, magenta, cyan, white, grey
+#
+# Available custom colors (Hex):
+#   lightpink, pink, purple, white (hex), orange, teal, lime
+#
+# Available styles:
+#   bold, italic, underline, reset
+#
+# File Type Colors:
+#   Configure colors for 'ls' in [theme.files]
+#
+[config]
+username = "user"
+editor = "nano"
+
+[theme]
+prompt_template = "!teal!aeroshell@!lightpink!%username%!white!<>!purple!%directory%!green!:!reset! "
+autocomplete = "grey"
+typing = "lightpink"
+typingtext = "white"
+header = "pink"
+subheader = "purple"
+body = "white"
+active = "green"
+disable = "red"
+
+[theme.files]
+directory = "blue"
+executable = "orange"
+python = "teal"
+shellscript = "lime"
+rust = "red"
+javascript = "yellow"
+toml = "pink"
+json = "pink"
+default = "white"
+
+[colors]
+pink = "#FFC0CB"
+white = "#FFFFFF"
+purple = "#800080"
+teal = "#008080"
+lightpink = "#FFB6C1"
+lime = "#00FF00"
+orange = "#FFA500"
+green = "#32CD32"
+red = "#FF0000"
+grey = "#808080"
+blue = "#0000FF"
+yellow = "#FFFF00"
