@@ -12,6 +12,8 @@ A customizable, Rust-based shell for macOS and Linux.
 
 ## Installation
 
+*(Note: Make sure you have Curl installed!).*
+
 **Automatic Install**
 
 *Latest*
