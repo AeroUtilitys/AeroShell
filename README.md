@@ -21,7 +21,7 @@ A customizable, Rust-based shell for macOS and Linux.
 
 ### If you want the latest Dev or Nightly version
 Download the Latest Stable Version then get the lastest Dev **update.zip** the use the Aero Update command on the Stable Version
-
+`aero update -d update.zip`
 ## Updating
 
 > [!CAUTION]

@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-# Configuration
 REPO_URL="https://github.com/AeroUtilitys/AeroShell.git"
 INSTALL_DIR="$HOME/aeroshell"
 HISTORY_FILE="$HOME/.aeroshell_history"
@@ -86,7 +85,6 @@ echo ""
 echo "[*] Checking dependencies... ✦⁺."
 
 if ! command -v git &> /dev/null; then
-    echo "[!] Installing Git..."
     sudo dnf install -y git || sudo apt-get install -y git
 fi
 
@@ -132,7 +130,6 @@ add_alias "$HOME/.zshrc"
 add_alias "$HOME/.bashrc"
 add_alias "$HOME/.profile"
 
-# Cleanup
 rm -rf "$TEMP_DIR"
 
 echo "-----------------------------------------------------"
