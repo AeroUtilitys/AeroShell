@@ -19,9 +19,13 @@ A customizable, Rust-based shell for macOS and Linux.
 *Latest*
 `curl -sSf https://raw.githubusercontent.com/AeroUtilitys/AeroShell/main/bootstrap.sh | bash`
 
-### If you want Dev (Nightly) Build it yourself!
+### If you want the latest Dev or Nightly version
+Download the Latest Stable Version then get the lastest Dev **update.zip** the use the Aero Update command on the Stable Version
 
 ## Updating
+
+> [!CAUTION]
+> If you update aero to a older version than your base, **It will break things**
 
 To update AeroShell from a source zip:
 ```bash
