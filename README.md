@@ -19,8 +19,7 @@ A customizable, Rust-based shell for macOS and Linux.
 *Latest*
 `curl -sSf https://raw.githubusercontent.com/AeroUtilitys/AeroShell/main/bootstrap.sh | bash`
 
-*Dev (Nightly)*
-`curl -sSf https://raw.githubusercontent.com/AeroUtilitys/AeroShell/dev/bootstrap.sh | bash`
+### If you want Dev (Nightly) Build it yourself!
 
 ## Updating
 
