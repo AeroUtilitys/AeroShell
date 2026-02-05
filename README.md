@@ -12,18 +12,11 @@ A customizable, Rust-based shell for macOS and Linux.
 
 ## Installation
 
-### Automatic Install (Internet)
-```bash
-# Assuming the script is hosted somewhere
-curl -fsSL https://raw.githubusercontent.com/nebuff/aeroshell/main/internetinstall.sh | bash
-```
-
-### Manual Install
-```bash
-git clone https://github.com/nebuff/aeroshell.git
-cd aeroshell
-./install.sh
-```
+**Automatic Install**
+*Latest*
+`curl -sSf https://raw.githubusercontent.com/AeroUtilitys/AeroShell/main/bootstrap.sh | bash`
+*Dev (Nightly)*
+`curl -sSf https://raw.githubusercontent.com/AeroUtilitys/AeroShell/dev/bootstrap.sh | bash`
 
 ## Configuration
 
