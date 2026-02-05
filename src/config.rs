@@ -62,7 +62,6 @@ impl Default for RootConfig {
         files.insert("toml".to_string(), "pink".to_string());
         files.insert("json".to_string(), "pink".to_string());
         files.insert("default".to_string(), "white".to_string());
-        // Example custom file types as requested
         files.insert("file.zip".to_string(), "pink".to_string());
         files.insert("file.iso".to_string(), "pink".to_string());
 
@@ -147,9 +146,12 @@ pub fn save_config(config: &RootConfig) -> std::io::Result<()> {
          # Available styles:\n\
          #   bold, italic, underline, reset\n\
          #\n\
-         # File Type Colors:\n\
-         #   Configure colors for 'ls' in [theme.files].\n\
-         #   Use keys like 'python' (for .py), 'directory', or 'file.zip' (for .zip).\n\
+         # File Type Colors [theme.files]:\n\
+         #   Use keys like 'python' (for .py), 'directory', 'executable'.\n\
+         #   For custom extensions with dots, YOU MUST QUOTE THE KEY:\n\
+         #     \"file.zip\" = \"pink\"\n\
+         #     \"file.iso\" = \"pink\"\n\
+         #   If you don't quote it (file.zip = ...), it will break the config!\n\
          #\n\
          {}\n",
         content

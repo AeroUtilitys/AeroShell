@@ -10,6 +10,8 @@ use std::io::Read;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
+use sysinfo::{System, ProcessesToUpdate};
+
 use crate::config::{load_config, get_config_path, RootConfig};
 use crate::prompt::format_prompt;
 use crate::completer::AeroCompleter;
@@ -145,6 +147,126 @@ fn cmd_ls(args: &[&str], config: &RootConfig) {
     }
 }
 
+fn cmd_proc(args: &[&str], config: &RootConfig) {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+    // We only refresh processes specifically? new_all refreshes everything once.
+    // To be strictly up to date on subsequent calls we might need refresh, but this command runs once per invocation.
+
+    let header_c = get_ansi_from_config(&config.theme.header, config);
+    let subheader_c = get_ansi_from_config(&config.theme.subheader, config);
+    let body_c = get_ansi_from_config(&config.theme.body, config);
+    let active_c = get_ansi_from_config(&config.theme.active, config);
+    let reset = "\x1B[0m";
+
+    if args.is_empty() {
+        println!("\n{}Process Monitor (proc):{}", header_c, reset);
+        println!("{}", "=".repeat(30));
+
+        let commands = [
+            ("mem", "", "Show top memory consumers"),
+            ("cpu", "", "Show top CPU consumers"),
+            ("gpu", "", "Show GPU/System memory info"),
+            ("<name>", "", "Search processes by name"),
+        ];
+
+        for (cmd, args, desc) in commands {
+            println!("  {}{:<10}{} {}{:<10}{} - {}{}{}",
+                active_c, cmd, reset,
+                subheader_c, args, reset,
+                body_c, desc, reset
+            );
+        }
+        println!("\n{}Usage:{} proc [mem|cpu|gpu|<name>]", header_c, reset);
+        return;
+    }
+
+    // Collect processes into a simplified struct for sorting/printing
+    struct ProcInfo {
+        pid: sysinfo::Pid,
+        name: String,
+        memory: u64, // bytes
+        cpu: f32,    // usage %
+    }
+
+    let mut procs: Vec<ProcInfo> = sys.processes().iter().map(|(pid, p)| {
+        ProcInfo {
+            pid: *pid,
+            name: p.name().to_string_lossy().to_string(),
+            memory: p.memory(),
+            cpu: p.cpu_usage(),
+        }
+    }).collect();
+
+    match args[0] {
+        "mem" => {
+            println!("{}Top Memory Consumers:{}", header_c, reset);
+            println!("{:<8} {:<25} {:>15}", "PID", "Name", "Memory (MB)");
+            println!("{}", "=".repeat(50));
+
+            procs.sort_by(|a, b| b.memory.cmp(&a.memory));
+            for p in procs.iter().take(10) {
+                let mem_mb = p.memory as f32 / 1024.0 / 1024.0;
+                println!("{:<8} {}{:<25}{} {:>15.2}",
+                    p.pid, subheader_c, p.name, reset, mem_mb);
+            }
+        },
+        "cpu" => {
+            println!("{}Top CPU Consumers:{}", header_c, reset);
+            println!("{:<8} {:<25} {:>10}", "PID", "Name", "CPU %");
+            println!("{}", "=".repeat(45));
+
+            procs.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap_or(std::cmp::Ordering::Equal));
+            for p in procs.iter().take(10) {
+                println!("{:<8} {}{:<25}{} {:>10.2}",
+                    p.pid, subheader_c, p.name, reset, p.cpu);
+            }
+        },
+        "gpu" => {
+            // sysinfo doesn't support GPU usage directly.
+            // On Apple Silicon (Asahi), GPU memory is unified.
+            // We can perhaps show total system memory usage as a proxy or just list standard processes
+            // emphasizing it's shared memory.
+            println!("{}GPU/Unified Memory Info:{}", header_c, reset);
+            println!("{}Note: Granular GPU process usage is not standardly available via sysinfo.{}", body_c, reset);
+            println!("Showing total system memory usage (Shared):");
+
+            let total_mem = sys.total_memory() as f32 / 1024.0 / 1024.0 / 1024.0; // GB
+            let used_mem = sys.used_memory() as f32 / 1024.0 / 1024.0 / 1024.0;
+
+            println!("  Total: {:.2} GB", total_mem);
+            println!("  Used:  {:.2} GB", used_mem);
+        },
+        _ => {
+            // Filter by name (comma separated)
+            // Join all args to handle spaces if split by shell (though we use comma logic per request)
+            // If user types "proc firefox, discord", args might be ["firefox,", "discord"] depending on shlex.
+            // Let's rejoin and split by comma.
+            let query = args.join(" ");
+            let targets: Vec<&str> = query.split(',').map(|s| s.trim()).collect();
+
+            println!("{}Searching processes for: {:?}{}", header_c, targets, reset);
+            println!("{:<8} {:<25} {:>10} {:>15}", "PID", "Name", "CPU %", "Memory (MB)");
+            println!("{}", "=".repeat(65));
+
+            let matches: Vec<_> = procs.iter().filter(|p| {
+                let name_lower = p.name.to_lowercase();
+                targets.iter().any(|t| name_lower.contains(&t.to_lowercase()))
+            }).collect();
+
+            if matches.is_empty() {
+                println!("{}No matching processes found.{}", body_c, reset);
+            } else {
+                for p in matches {
+                    let mem_mb = p.memory as f32 / 1024.0 / 1024.0;
+                    println!("{:<8} {}{:<25}{} {:>10.2} {:>15.2}",
+                        p.pid, subheader_c, p.name, reset, p.cpu, mem_mb);
+                }
+            }
+        }
+    }
+}
+
 fn main() {
     ctrlc::set_handler(move || {}).expect("Error setting Ctrl-C handler");
 
@@ -250,6 +372,9 @@ fn main() {
                     "ls" => {
                         cmd_ls(&args, &config);
                     },
+                    "proc" => {
+                        cmd_proc(&args, &config);
+                    },
                     "exit" => break,
                     "clear" => {
                         let _ = line_editor.clear_screen();
@@ -267,11 +392,23 @@ fn main() {
                          let reset = "\x1B[0m";
 
                          if args.is_empty() {
-                            println!("Usage: {}aero <command>{}", active_c, reset);
-                            println!("{}Commands:{}", header_c, reset);
-                            println!("  {}config{}           - {}Open configuration in editor{}", subheader_c, reset, body_c, reset);
-                            println!("  {}setdefault{}       - {}Set AeroShell as default shell{}", subheader_c, reset, body_c, reset);
-                            println!("  {}update <zipfile>{} - {}Update AeroShell from a source zip{}", subheader_c, reset, body_c, reset);
+                            println!("\n{}AeroShell Manager (aero):{}", header_c, reset);
+                            println!("{}", "=".repeat(30));
+
+                            let commands = [
+                                ("config", "", "Open configuration in editor"),
+                                ("setdefault", "", "Set AeroShell as default shell"),
+                                ("update", "<zipfile>", "Update AeroShell from a source zip"),
+                            ];
+
+                            for (cmd, args, desc) in commands {
+                                println!("  {}{:<10}{} {}{:<10}{} - {}{}{}",
+                                    active_c, cmd, reset,
+                                    subheader_c, args, reset,
+                                    body_c, desc, reset
+                                );
+                            }
+                            println!("\n{}Usage:{} aero <command>", header_c, reset);
                         } else {
                             match args[0] {
                                 "config" => {
@@ -349,6 +486,7 @@ fn main() {
                         let commands = [
                             ("cd", "<dir>", "Change directory"),
                             ("ls", "[dir]", "List files (colored)"),
+                            ("proc", "[mem|cpu|name]", "Process monitor"), // Added description
                             ("exit", "", "Exit shell"),
                             ("clear", "", "Clear screen"),
                             ("config", "", "Open configuration"),
@@ -364,8 +502,8 @@ fn main() {
                             );
                         }
                         println!("\n{}Usage Tips:{}", header_c, reset);
+                        println!("  - Use 'proc mem' to check memory usage.");
                         println!("  - Use 'aero update <zip>' to update from source.");
-                        println!("  - Edit 'config.toml' to change prompt colors (hex codes supported!)");
                         println!();
                     },
                     cmd => {
