@@ -1,6 +1,7 @@
 mod config;
 mod prompt;
 mod completer;
+mod version;
 
 use std::process::{Command, Stdio};
 use std::env;
@@ -396,9 +397,10 @@ fn main() {
                             println!("{}", "=".repeat(30));
 
                             let commands = [
+                                ("about", "", "Show version and build info"),
                                 ("config", "", "Open configuration in editor"),
                                 ("setdefault", "", "Set AeroShell as default shell"),
-                                ("update", "<zipfile>", "Update AeroShell from a source zip"),
+                                ("update", "[-d] <zip>", "Update AeroShell from a source zip"),
                             ];
 
                             for (cmd, args, desc) in commands {
@@ -411,6 +413,12 @@ fn main() {
                             println!("\n{}Usage:{} aero <command>", header_c, reset);
                         } else {
                             match args[0] {
+                                "about" => {
+                                    println!("\n{}AeroShell{}", header_c, reset);
+                                    println!("{}", "=".repeat(20));
+                                    println!("{}Version:{} {}", subheader_c, reset, crate::version::get_version_description());
+                                    println!();
+                                },
                                 "config" => {
                                     open_config(&config);
                                     config = load_config();
@@ -462,11 +470,25 @@ fn main() {
                                     }
                                 },
                                 "update" if args.len() > 1 => {
-                                    let zip_path = args[1];
-                                    if let Err(e) = update_aeroshell(zip_path) {
-                                        eprintln!("{}Update failed: {}{}", err_c, e, reset);
+                                    let mut zip_path = "";
+                                    let mut is_dev = false;
+
+                                    for arg in &args[1..] {
+                                        if *arg == "-d" || *arg == "--dev" {
+                                            is_dev = true;
+                                        } else {
+                                            zip_path = arg;
+                                        }
+                                    }
+
+                                    if zip_path.is_empty() {
+                                        println!("{}Usage: aero update [-d] <zipfile>{}", err_c, reset);
                                     } else {
-                                        println!("{}Update successful! Restart AeroShell to see changes.{}", active_c, reset);
+                                        if let Err(e) = update_aeroshell(zip_path, is_dev) {
+                                            eprintln!("{}Update failed: {}{}", err_c, e, reset);
+                                        } else {
+                                            println!("{}Update successful! Restart AeroShell to see changes.{}", active_c, reset);
+                                        }
                                     }
                                 },
                                 _ => println!("{}Unknown aero command: {}{}", err_c, args[0], reset),
@@ -554,7 +576,7 @@ fn open_config(config: &crate::config::RootConfig) {
         .map_err(|e| eprintln!("Failed to open editor: {}", e));
 }
 
-fn update_aeroshell(zip_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn update_aeroshell(zip_path: &str, is_dev: bool) -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting update process...");
 
     let temp_dir = env::temp_dir().join("aeroshell_update");
@@ -582,18 +604,21 @@ fn update_aeroshell(zip_path: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Building new version in {:?}...", source_dir);
 
-    let status = Command::new("cargo")
-        .arg("build")
-        .arg("--release")
-        .current_dir(&source_dir)
-        .status()?;
+    let mut cmd = Command::new("cargo");
+    cmd.arg("build");
+    if !is_dev {
+        cmd.arg("--release");
+    }
+
+    let status = cmd.current_dir(&source_dir).status()?;
 
     if !status.success() {
         return Err("Build failed".into());
     }
 
     let current_exe = env::current_exe()?;
-    let new_binary = source_dir.join("target/release/aeroshell");
+    let target_sub = if is_dev { "debug" } else { "release" };
+    let new_binary = source_dir.join(format!("target/{}/aeroshell", target_sub));
 
     if !new_binary.exists() {
         return Err("Built binary not found".into());
