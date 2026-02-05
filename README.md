@@ -80,6 +80,9 @@ echo -e "!$COLOR_HEADER!Welcome to my script"
 
 Run `curl -sSf https://raw.githubusercontent.com/AeroUtilitys/AeroShell/main/bootstrap.sh | bash` Then select Uninstall, If your having problems, Open an Issue and try reinstalling using the bootstrap script provided to reinstall
 
+# Contact
+*Email:* recloudnoreply@gmail.com
+
 ## Important Information
 
 > [!IMPORTANT]
