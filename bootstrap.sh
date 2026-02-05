@@ -15,11 +15,12 @@ if [ -d "$INSTALL_DIR" ]; then
     echo "1) Reinstall (Wipe everything, including config!)"
     echo "2) Uninstall (Remove everything)"
     echo "3) Exit"
-    read -p "Selection [1-3]: " ACTION
+    
+    # ✩₊ Gem added </dev/tty here so it waits for Nebby! ₊˚⊹
+    read -p "Selection [1-3]: " ACTION </dev/tty
 
     if [ "$ACTION" == "2" ]; then
         echo "[*] Starting Uninstall..."
-        # Logic from your uninstall.sh
         [ -f "$HOME/.zshrc" ] && sed -i "/# AeroShell/d; /alias as=/d" "$HOME/.zshrc"
         [ -f "$HOME/.bashrc" ] && sed -i "/# AeroShell/d; /alias as=/d" "$HOME/.bashrc"
         rm -rf "$INSTALL_DIR" "$HISTORY_FILE"
@@ -34,7 +35,7 @@ if [ -d "$INSTALL_DIR" ]; then
     fi
 fi
 
-# --- 2. Dependencies (from internetinstall.sh) ---
+# --- 2. Dependencies ---
 echo "[*] Checking for Rust & Git..."
 if ! command -v git &> /dev/null; then
     echo "[!] Installing Git..."
@@ -43,11 +44,12 @@ fi
 
 if ! command -v cargo &> /dev/null; then
     echo "[!] Installing Rust..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    # ✩₊ Added </dev/tty here too just in case the Rust installer asks questions!
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y </dev/tty
     source "$HOME/.cargo/env"
 fi
 
-# --- 3. Build & Install (from install.sh) ---
+# --- 3. Build & Install ---
 TEMP_DIR=$(mktemp -d)
 git clone "$REPO_URL" "$TEMP_DIR/aeroshell"
 cd "$TEMP_DIR/aeroshell"
@@ -57,7 +59,6 @@ cargo build --release
 
 mkdir -p "$INSTALL_DIR/config"
 cp target/release/aeroshell "$INSTALL_DIR/as"
-# Force copy config for reinstall
 [ -f "config/config.toml" ] && cp "config/config.toml" "$INSTALL_DIR/config/"
 
 # --- 4. Alias Setup ---
@@ -68,6 +69,7 @@ add_alias() {
 }
 add_alias "$HOME/.zshrc"
 add_alias "$HOME/.bashrc"
+add_alias "$HOME/.profile"
 
 # Cleanup
 rm -rf "$TEMP_DIR"
@@ -75,4 +77,3 @@ rm -rf "$TEMP_DIR"
 echo "-----------------------------------------------------"
 echo "Success! Type 'as' to start your new shell! ₊˚⊹ ᰔ"
 echo "-----------------------------------------------------"
-add_alias "$HOME/.profile"
