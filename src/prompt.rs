@@ -135,6 +135,7 @@ mod tests {
                 body: "".to_string(),
                 active: "".to_string(),
                 disable: "".to_string(),
+                files: HashMap::new(),
             },
             colors: HashMap::new(),
         };

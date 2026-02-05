@@ -160,7 +160,24 @@ fn cmd_proc(args: &[&str], config: &RootConfig) {
     let reset = "\x1B[0m";
 
     if args.is_empty() {
-        println!("{}Usage: proc [mem | cpu | gpu | <name>]{}", active_c, reset);
+        println!("\n{}Process Monitor (proc):{}", header_c, reset);
+        println!("{}", "=".repeat(30));
+
+        let commands = [
+            ("mem", "", "Show top memory consumers"),
+            ("cpu", "", "Show top CPU consumers"),
+            ("gpu", "", "Show GPU/System memory info"),
+            ("<name>", "", "Search processes by name"),
+        ];
+
+        for (cmd, args, desc) in commands {
+            println!("  {}{:<10}{} {}{:<10}{} - {}{}{}",
+                active_c, cmd, reset,
+                subheader_c, args, reset,
+                body_c, desc, reset
+            );
+        }
+        println!("\n{}Usage:{} proc [mem|cpu|gpu|<name>]", header_c, reset);
         return;
     }
 
@@ -375,11 +392,23 @@ fn main() {
                          let reset = "\x1B[0m";
 
                          if args.is_empty() {
-                            println!("Usage: {}aero <command>{}", active_c, reset);
-                            println!("{}Commands:{}", header_c, reset);
-                            println!("  {}config{}           - {}Open configuration in editor{}", subheader_c, reset, body_c, reset);
-                            println!("  {}setdefault{}       - {}Set AeroShell as default shell{}", subheader_c, reset, body_c, reset);
-                            println!("  {}update <zipfile>{} - {}Update AeroShell from a source zip{}", subheader_c, reset, body_c, reset);
+                            println!("\n{}AeroShell Manager (aero):{}", header_c, reset);
+                            println!("{}", "=".repeat(30));
+
+                            let commands = [
+                                ("config", "", "Open configuration in editor"),
+                                ("setdefault", "", "Set AeroShell as default shell"),
+                                ("update", "<zipfile>", "Update AeroShell from a source zip"),
+                            ];
+
+                            for (cmd, args, desc) in commands {
+                                println!("  {}{:<10}{} {}{:<10}{} - {}{}{}",
+                                    active_c, cmd, reset,
+                                    subheader_c, args, reset,
+                                    body_c, desc, reset
+                                );
+                            }
+                            println!("\n{}Usage:{} aero <command>", header_c, reset);
                         } else {
                             match args[0] {
                                 "config" => {
