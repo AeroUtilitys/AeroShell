@@ -76,3 +76,10 @@ echo -e "!$COLOR_HEADER!Welcome to my script"
 ## Uninstall
 
 Run `curl -sSf https://raw.githubusercontent.com/AeroUtilitys/AeroShell/main/bootstrap.sh | bash` Then select Uninstall, If your having problems, Open an Issue and try reinstalling using the bootstrap script provided to reinstall
+
+## Important Information
+
+> [!IMPORTANT]
+> This project was made partly by AI
+
+This does not mean the entire project was created by AI, I created (nebuff) the scripts but Jules (Googles code Bot) Helped me in writing rust since Im not familier with Rust, I know some people dont like using or being involved with AI so thats why I decided to put this in to the Readme, Most of my Projects are to show the powers of Ai while making Useful stuff out of the AI Boom, I Hope you like AeroShell and the Other utilitys my Project Aero has
