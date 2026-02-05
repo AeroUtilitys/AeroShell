@@ -20,6 +20,13 @@ A customizable, Rust-based shell for macOS and Linux.
 *Dev (Nightly)*
 `curl -sSf https://raw.githubusercontent.com/AeroUtilitys/AeroShell/dev/bootstrap.sh | bash`
 
+## Updating
+
+To update AeroShell from a source zip:
+```bash
+aero update path/to/update.zip
+```
+
 ## Configuration
 
 Run `aero config` to open your configuration file.
@@ -63,13 +70,6 @@ COLOR_HEADER=${AERO_THEME_HEADER:-green}
 echo -e "!$COLOR_HEADER!Welcome to my script"
 ```
 *(Note: You'll need to parse the color names or hex codes depending on your language's capability).*
-
-## Updating
-
-To update AeroShell from a source zip:
-```bash
-aero update path/to/source.zip
-```
 
 ## Uninstall
 
